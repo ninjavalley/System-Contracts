@@ -1,4 +1,4 @@
-# huobi-eco-contracts
+# Dithereum System Contracts
 
 ## Prepare
 
