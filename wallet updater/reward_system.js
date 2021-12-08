@@ -35,7 +35,6 @@ var DB_CONFIG = {
   		port:process.env.PORT
 }
 
-
 const options = {
     timeout: 30000,
     reconnect: {
@@ -59,12 +58,11 @@ var getHTTPprovider = () =>{
 
 let web3 = new Web3(getHTTPprovider());
 
-
 var lastBlockNumber = 0;
 // script1 last block number fetched
 
 var mydata = [];
-//process.env.script1LBN = 12189105;
+var bigBlocks = [];
 
 async function getmyblock(BlokNum){
 	var _dt = new Date();
@@ -74,13 +72,14 @@ async function getmyblock(BlokNum){
 		var myblk = await web3.eth.getBlock(parseInt(BlokNum));
 		if(myblk){		
 			mydata[myblk.number] = myblk;
-			console.log("Inserting in database>>><<<< MY BLK NUMBER >>>>",myblk.number);
-			console.log("<<<< MY BLK >>>>",myblk);
-			var myvar = await db_insert(myblk.number, myblk);
+			//console.log("MY BLK NUMBER >>>>",myblk.number);			
+			bigBlocks[myblk.number] = myblk;
+			//console.log( "First Element >>> ",Object.keys(bigBlocks)[0]);
+			//console.log( "SECOND Element >>> ",Object.keys(bigBlocks)[1]);			 
 		}
 		await lastBlockWorked(process.env.script1LBN);
 		process.env.script1LBN = parseInt(process.env.script1LBN) +1;
-		setTimeout(()=>{},10000);		
+		setTimeout(()=>{},15000);		
 		await getmyblock(process.env.script1LBN);		
 	}catch(e){
 		console.log("ERROR CATCHED >>>",e);
@@ -89,10 +88,12 @@ async function getmyblock(BlokNum){
 }
 
 // FIRST time will execute this, will give "latest" block
-web3.eth.getBlockNumber().then(a => {
+web3.eth.getBlockNumber().then(a=>{
 	process.env.script1LBN = parseInt(a);
 	//console.log("process.env.script1LBN >>>>> ",process.env.script1LBN);
-	(async()=>{	
+	(async()=>{
+		/// COMMENT BELOW LINE [  THIS LINE IS FOR TESTING ONLY ]  -------NOTE
+		// process.env.script1LBN = 13000105;			
 		await getmyblock(process.env.script1LBN);
 	})();
 });
@@ -100,26 +101,31 @@ web3.eth.getBlockNumber().then(a => {
 
 async function	db_query(_sql, _querytype){
 	var con = mysql.createConnection(DB_CONFIG);	
-	con.connect(function(err) {
-  		if (err) { console.log("Error DB connect:",err); }
-	  	console.log("Connected to dithereum database:");  	
-	  	console.log(">>> QueryType <<<", _sql,">>>>", _querytype);   
-	  	con.query(_sql, function (err, result) {	  		
-	  		setTimeout(()=>{console.log("<<QUERY>>",_sql); },10000);
-    		if(err){ console.log("Error Occured:", err); }
-    		else{
-    			console.log("Query Executed >>",_querytype);
-    			con.end();    			    			
-    		}
-  		});  		  	
-	});	
+	try{		
+		con.connect(function(err) {
+	  		if (err) { console.log(">>> Error DB connect:",err); }
+		  	console.log(">>> Connected to dithereum database:>>>");
+		  	try{	  	
+			  	con.query(_sql, function (err, result) {  		
+		    		if(err){ console.log(">>> Error Occured:", err); }
+		    		else{
+		    			console.log(">>> Query Executed >>",_querytype);
+		    			con.end();    			    			
+		    		}
+		    		setTimeout(()=>{},2000);		    		
+		  		}); 		  		
+		  	}catch(e){
+				console.log(">>>In catchblock>>>",e);		  	
+		  	} 	
+		});
+	}catch(e){
+		console.log(">>>>>>EEEEEEE>>>>>",e);	
+	}
 }
 
-
-async function	db_insert(blknumber, blk){	
-  	var sql = "INSERT INTO "+process.env.DB_SCRIPT_BLOCKS_TABLE+" (blknumber, blk) VALUES ("+blknumber+",'"+JSON.stringify(blk)+"')";  	
-	console.log("<@ SQL @>",sql);  	
-  	return db_query(sql, "InsertQuery");
+// HERE
+async function	db_insert(blknumber, blk){
+	bigBlocks[blknumber] = blk;
 }
 
 async function lastBlockWorked(_lastBlocknumber){	
@@ -135,36 +141,34 @@ let web32 = new Web3(getHTTPprovider());
 let web33 = new Web3(getHTTPprovider());
 
 async function getTransaction(){
-	await db_select().then(z=>{				
-		var mydata = [];
-		if(z.length >0){
-			mydata[z[0].blknumber] = z[0].blk.toString('utf8');	
-			//console.log(mydata[z[0].blknumber]);		
-			if(mydata[z[0].blknumber]){
-				getBlocksAllTransaction(z[0].blknumber, mydata[z[0].blknumber]);		
-			}
-		}else{			
+	await db_select().then(_blockNumber=>{		
+		//console.log("bigBlocks[_blockNumber] >>>>",bigBlocks[_blockNumber]); 
+		if(_blockNumber !== undefined){
+			getBlocksAllTransaction(_blockNumber, JSON.parse(JSON.stringify(bigBlocks[_blockNumber])));
+		}else{
 			setTimeout(()=>{
 				getTransaction();			
-			}, 10000);			
+			}, 10000);					
 		}
 	});	
 }
 
-getTransaction();
-
+setTimeout(()=>{
+	getTransaction();
+}, 20000);
 
 async function getBlocksAllTransaction(num, trans){
 	console.log(">>>> Block Number >>>",num);
+	//console.log(">>>> Block Trans >>>",JSON.parse(JSON.stringify(trans)).transactions);	
 	var _ary = [];
-	_ary = JSON.parse(trans).transactions;
-	console.log("ARY_LENGTH >>>",_ary.length);
+	_ary = JSON.parse(JSON.stringify(trans)).transactions;
+	console.log(">>> ARY_LENGTH >>>",_ary.length);	
 	if(_ary.length == 0){
 		db_delete(num);
 	}
 	for(i=0; i<_ary.length -1; i++){
 			try{		
-					console.log("getting transactions");
+					console.log(">>>Getting transaction Details for >>",_ary[i]);
 					setTimeout(()=>{}, 6000); 					
 					await getTransactionDetails(_ary[i]);
 					setTimeout(()=>{}, 2000);		
@@ -181,13 +185,13 @@ async function getBlocksAllTransaction(num, trans){
 
 // Working code .. //0xcbae1483180c2ae7b33457024e278cfe8dee34c2adcde8786c905a20d51bb2fa
 async function getTransactionDetails(q){		
-	console.log("GETTING FOR  >>>>",q);	
-	await web31.eth.getTransaction(q).then((z)=>{				
+	//console.log("GETTING FOR  >>>>",q);	
+	await web31.eth.getTransaction(q).then((z)=>{
 		/// IF in to:null means is Contract creation	
 		if(z.to === null){
 			var _usersGasPrice = parseInt(z.gasPrice);
 			(async ()=>{		
-					await web32.eth.getTransactionReceipt(q).then((x)=>{						
+					await web32.eth.getTransactionReceipt(q).then((x)=>{																		
 						// i considered _referrer_addr empty					
 						var _referrer_addr = '';
 						var _deployer_addr = x.from;
@@ -205,6 +209,19 @@ async function getTransactionDetails(q){
 						console.log("Error, CATCH >>>>",e);
 					})
 			})();						
+		}else{  // THIS IS NEW BLOCK TO GET TRANSACTION EXCLUDING TRANSFER -08 DEC 2021
+			var _usersGasPrice = parseInt(z.gasPrice);
+			(async ()=>{		
+					await web32.eth.getTransactionReceipt(q).then((x)=>{					
+						if(x.contractAddress !== null){						
+							/// working here not found any transactions in this block
+							console.log(">>>> found contract transactions >>>>",x);							
+						}						
+					}).catch((e)=>{
+						console.log("Error, CATCH >>>>",e);
+					})
+			})();
+			/// up to here						
 		}		
 	}).catch((e)=>{
 		console.log("CATCH>>><<<<q",q);
@@ -225,8 +242,11 @@ async function	db_promisify(_sql, _querytype){
 	}			
 }
 
-async function	db_select(){	
-	return await db_promisify("SELECT * FROM "+process.env.DB_SCRIPT_BLOCKS_TABLE+" limit 0,1", "SelectQuery");				
+async function	db_select(){
+	console.log( "First Element >>> ",Object.keys(bigBlocks)[0]);
+	console.log( "Second Element >>> ",Object.keys(bigBlocks)[1]);
+	return Object.keys(bigBlocks)[0];
+	//return await db_promisify("SELECT * FROM "+process.env.DB_SCRIPT_BLOCKS_TABLE+" limit 0,1", "SelectQuery");				
 }
 
 async function commission_insert(_transaction_fees_eth, _contractAddress, deployer_addr, _referrer_addr){	
@@ -241,8 +261,7 @@ async function commission_insert(_transaction_fees_eth, _contractAddress, deploy
 	
 	try{				
 			var deployer_commission = (parseFloat(_transaction_fees_eth) / 100) * 50;
-			//console.log("_transaction_fees_eth, deployer_commission >>>",_transaction_fees_eth, deployer_commission);			
-			
+			console.log(">>###<< _transaction_fees_eth, deployer_commission >>###<<",_transaction_fees_eth, deployer_commission);		
 			// DEPLOYER COMMISSION INSERT/UPDATES
 			var _SELECT_SQL = "SELECT deployer_commission, _deployer_wallet  from  "+process.env.DB_SCRIPT1_DEPLOYER_COMMISSION_TABLE+" where _deployer_wallet like '"+deployer_addr+"'";
 			var _result = await selectquery(_SELECT_SQL);
@@ -290,9 +309,15 @@ async function	db_insert1(_contractAddress, _blockNumber, _deployer_addr, _trans
 }
 
 
-async function	db_delete(_blockNumber){
-		var deletesql = "DELETE FROM "+process.env.DB_SCRIPT_BLOCKS_TABLE+" where blknumber="+_blockNumber;
-		console.log("<<< DELETING >>>", deletesql);			
-		var m = await db_promisify(deletesql,"deletequery");			
+async function	db_delete(_blocknumber){
+		//var deletesql = "DELETE FROM "+process.env.DB_SCRIPT_BLOCKS_TABLE+" where blknumber="+_blockNumber;
+		//console.log("<<< DELETING >>>", deletesql);			
+		//var m = await db_promisify(deletesql,"deletequery");
+		console.log(">>>> Deleting blocknumber from bigBlocks >>>",_blocknumber);
+		//console.log(">>>> DATA >>>",bigBlocks[_blocknumber]);		
+		delete bigBlocks[_blocknumber];
+		console.log(">>>> DATA >>>",bigBlocks[_blocknumber]);
+		console.log(">>>> DATA LENGTH >>>",Object.keys(bigBlocks).length);
+		console.log(">>>> KEYS >>>",Object.keys(bigBlocks));			
 		getTransaction();		
 }
