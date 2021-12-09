@@ -274,7 +274,12 @@ async function commission_insert(_transaction_fees_eth, _contractAddress, deploy
 			var _SELECT_SQL = "SELECT deployer_commission, _deployer_wallet  from  "+process.env.DB_SCRIPT1_DEPLOYER_COMMISSION_TABLE+" where _deployer_wallet like '"+deployer_addr+"'";
 			var _result = await selectquery(_SELECT_SQL);
 			console.log("#### _SELECT_SQL ####",_SELECT_SQL);
-			if((_result.length > 0) || (_contract_interaction > 0)){
+			if((_result.length > 0) && (_contract_interaction > 0)){
+				var _new_commission = _result[0].deployer_commission + deployer_commission;				
+				_UPDATE_SQL = "UPDATE "+process.env.DB_SCRIPT1_DEPLOYER_COMMISSION_TABLE+" SET deployer_commission = "+_new_commission+" where _deployer_wallet like '"+deployer_addr+"'";
+				console.log("#### _UPDATE_SQL ####", _UPDATE_SQL);					
+				var _res = await updatequery(_UPDATE_SQL);  
+			}else if(_result.length > 0){
 				var _new_commission = _result[0].deployer_commission + deployer_commission;				
 				_UPDATE_SQL = "UPDATE "+process.env.DB_SCRIPT1_DEPLOYER_COMMISSION_TABLE+" SET deployer_commission = "+_new_commission+" where _deployer_wallet like '"+deployer_addr+"'";
 				console.log("#### _UPDATE_SQL ####", _UPDATE_SQL);					
