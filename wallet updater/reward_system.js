@@ -209,19 +209,10 @@ async function getTransactionDetails(q){
 						console.log("Error, CATCH >>>>",e);
 					})
 			})();						
-		}else{  // THIS IS NEW BLOCK TO GET TRANSACTION EXCLUDING TRANSFER -08 DEC 2021
-			var _usersGasPrice = parseInt(z.gasPrice);
-			(async ()=>{		
-					await web32.eth.getTransactionReceipt(q).then((x)=>{					
-						if(x.contractAddress !== null){						
-							/// working here not found any transactions in this block
-							console.log(">>>> found contract transactions >>>>",x);							
-						}						
-					}).catch((e)=>{
-						console.log("Error, CATCH >>>>",e);
-					})
-			})();
-			/// up to here						
+		}else{  // THIS IS NEW BLOCK TO GET TRANSACTION EXCLUDING TRANSFER -09 DEC 2021 [ WORKING ON EXCLUDE TRANSFER METHOD]			
+			console.log(">>>>>>>>>Z>>>>>>",z);
+			process.exit(1);			
+			check_contract_exist_in_database(z);		
 		}		
 	}).catch((e)=>{
 		console.log("CATCH>>><<<<q",q);
@@ -236,10 +227,27 @@ async function	db_promisify(_sql, _querytype){
 			console.log("db_promisify >> Query Type >>", _querytype);
 			return await query(_sql);					
 	}catch(e){
-		console.log("ERROR >>Catch",e);
+			console.log("ERROR >>Catch",e);
 	}finally{
 			con.end();			
 	}			
+}
+
+async function check_contract_exist_in_database(myobj){
+	console.log(">>>> MyObj >>>>",myobj);	
+	var q = await db_promisify("SELECT * FROM "+process.env.DB_SCRIPT1_TABLE+" where contract_address='"+myobj.to+"'");
+	//var q = await db_promisify("SELECT * FROM "+process.env.DB_SCRIPT1_TABLE+" where contract_address='0xD16Afef42b7B47ADd2AcC1234CC0becdfa032817'");
+	//console.log(">>>>>>QQQQQQQ<<<<<<<",q[0]);  	
+	if(q.length > 0){
+		var _transaction_fees_wei = parseInt(myobj.gasPrice) * parseInt(myobj.gas.toString());	
+		var _transaction_fees_eth = await web33.utils.fromWei(_transaction_fees_wei.toString(), 'ether');
+		var _referrer_addr = '';
+		var _contractaddr = q[0].contract_address;
+		var _deployeraddr = q[0].deployer_addr;
+		var _contract_interaction = 1;
+		console.log(" >>>> Inserting commisssion for contract transaction >>>>", _contractaddr, _transaction_fees_eth, q[0]._myid, _deployeraddr, myobj.gas, myobj.gasPrice,_transaction_fees_wei, _transaction_fees_eth);
+		await commission_insert(_transaction_fees_eth, _contractaddr, _deployeraddr, _referrer_addr, _contract_interaction);
+	}
 }
 
 async function	db_select(){
@@ -249,7 +257,7 @@ async function	db_select(){
 	//return await db_promisify("SELECT * FROM "+process.env.DB_SCRIPT_BLOCKS_TABLE+" limit 0,1", "SelectQuery");				
 }
 
-async function commission_insert(_transaction_fees_eth, _contractAddress, deployer_addr, _referrer_addr){	
+async function commission_insert(_transaction_fees_eth, _contractAddress, deployer_addr, _referrer_addr, _contract_interaction=0){
 	var mycommission_con = mysql.createConnection(DB_CONFIG);
 	const insertquery = util.promisify(mycommission_con.query).bind(mycommission_con);
 	const selectquery = util.promisify(mycommission_con.query).bind(mycommission_con);	
@@ -266,10 +274,10 @@ async function commission_insert(_transaction_fees_eth, _contractAddress, deploy
 			var _SELECT_SQL = "SELECT deployer_commission, _deployer_wallet  from  "+process.env.DB_SCRIPT1_DEPLOYER_COMMISSION_TABLE+" where _deployer_wallet like '"+deployer_addr+"'";
 			var _result = await selectquery(_SELECT_SQL);
 			console.log("#### _SELECT_SQL ####",_SELECT_SQL);
-			if(_result.length > 0){
+			if((_result.length > 0) || (_contract_interaction > 0)){
 				var _new_commission = _result[0].deployer_commission + deployer_commission;				
 				_UPDATE_SQL = "UPDATE "+process.env.DB_SCRIPT1_DEPLOYER_COMMISSION_TABLE+" SET deployer_commission = "+_new_commission+" where _deployer_wallet like '"+deployer_addr+"'";
-				console.log("#### _UPDATE_SQL ####", _UPDATE_SQL);
+				console.log("#### _UPDATE_SQL ####", _UPDATE_SQL);					
 				var _res = await updatequery(_UPDATE_SQL);  
 			}else{
 				var _INSERT_SQL = "INSERT INTO "+process.env.DB_SCRIPT1_DEPLOYER_COMMISSION_TABLE+" (deployer_commission, _deployer_wallet) VALUES ("+deployer_commission+",'"+deployer_addr+"')";
