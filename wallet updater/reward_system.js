@@ -23,8 +23,10 @@ And then filter out all the transactions as smart contract calls
 var mysql = require('mysql');
 require('dotenv').config();
 const Web3 = require("web3");
-var EXCLUDE_THESE = ['Transfer'];
+var EXCLUDE_THESE = ['transfer'];
 const util = require('util');
+var abiDecoder = require('abi-decoder');
+abiDecoder.addABI(JSON.parse(process.env.COMPANY_CONTRACT_ABI));
 
 var DB_CONFIG = {
   		host: process.env.DB_HOST.toString(),
@@ -89,8 +91,7 @@ async function getmyblock(BlokNum){
 
 // FIRST time will execute this, will give "latest" block
 web3.eth.getBlockNumber().then(a=>{
-	process.env.script1LBN = parseInt(a);
-	//console.log("process.env.script1LBN >>>>> ",process.env.script1LBN);
+	process.env.script1LBN = parseInt(a);	
 	(async()=>{
 		/// COMMENT BELOW LINE [  THIS LINE IS FOR TESTING ONLY ]  -------NOTE
 		// process.env.script1LBN = 13000105;			
@@ -187,6 +188,7 @@ async function getBlocksAllTransaction(num, trans){
 async function getTransactionDetails(q){		
 	//console.log("GETTING FOR  >>>>",q);	
 	await web31.eth.getTransaction(q).then((z)=>{
+		//console.log(">>>> z",z);
 		/// IF in to:null means is Contract creation	
 		if(z.to === null){
 			var _usersGasPrice = parseInt(z.gasPrice);
@@ -209,14 +211,20 @@ async function getTransactionDetails(q){
 						console.log("Error, CATCH >>>>",e);
 					})
 			})();						
-		}else{  // THIS IS NEW BLOCK TO GET TRANSACTION EXCLUDING TRANSFER -09 DEC 2021 [ WORKING ON EXCLUDE TRANSFER METHOD]			
-			console.log(">>>>>>>>>Z>>>>>>",z);
-			process.exit(1);			
-			check_contract_exist_in_database(z);		
+		}else{  // THIS IS NEW BLOCK TO GET TRANSACTION EXCLUDING TRANSFER -09 DEC 2021 [ WORKING ON EXCLUDE TRANSFER METHOD]		
+			//console.log(">>>>>>>>>Z>>>>>>",z.input);	
+   	   let mydata = abiDecoder.decodeMethod(z.input);   	   
+   	   if(mydata !== undefined){   	   	
+   	   	if(EXCLUDE_THESE.includes(mydata.name.toLowerCase())){		
+   	   		console.log(">>>SKIPPING TRANSFER TRANSACTION >>>",mydata.name);
+				}else{
+					//console.log("Not transfer ... check in db ....",mydata.name);					
+					check_contract_exist_in_database(z);				
+				}
+			}		
 		}		
 	}).catch((e)=>{
-		console.log("CATCH>>><<<<q",q);
-		console.log("Error, catch >>>",e);
+		console.log("ERROR, CATCH>>><<<<q, e",q,e);		
 	})	
 }
 
